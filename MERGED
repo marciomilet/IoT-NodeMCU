@@ -29,7 +29,11 @@ const byte APDS9960_INT  = 12; //GPIO12 (D6)
 
 
 // Global Variables
+
 int valorint=0;
+
+int valorinteiro=0;
+
 SparkFun_APDS9960 apds = SparkFun_APDS9960();
 volatile bool isr_flag = 0;
 
@@ -156,10 +160,41 @@ void novo() {
     valor = line;
     valori = valor.toFloat();
   }
-  Serial.println(valori);
   valorint = valori;
+  Serial.println(valorint);
   client.stop();
 }
+
+void novissimo() {
+
+  const int httpPort = 80;
+  if (!client.connect(server, httpPort)) {
+    Serial.println("Erro de conexão");
+    return;
+  }
+  String url = "/channels/2492075/fields/2/last";
+  
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + server + "\r\n" + 
+               "Connection: close\r\n\r\n");
+  delay(500);
+  float valori = 0;
+  float valorok =0;
+  String valor;
+  
+  while(client.available()){
+    String line = client.readStringUntil('\r');
+    valor = line;
+      valori = valor.toFloat();
+      if (valori != 0){
+        valorok = valori;
+      }
+  }
+  valorinteiro = valorok;
+  Serial.println(valorinteiro);
+  client.stop();
+}
+
 
 
 void handleGesture() {
@@ -201,6 +236,24 @@ void handleGesture() {
         break;
       case DIR_RIGHT:
         Serial.println("RIGHT");
+        novissimo();
+        switch(valorinteiro){
+          case 95 ... 100:   //acima de 94 de umidade LED azul.
+          digitalWrite(red, HIGH);
+          digitalWrite(blue, LOW);
+          digitalWrite(green, HIGH);
+          break;
+          case 80 ... 94:     //entre 80 e 94 de umidade LED azul e vermelho.
+          digitalWrite(red, LOW);
+          digitalWrite(blue, LOW);
+          digitalWrite(green, HIGH);
+          break;
+          default:  //abaixo de 80 de umidade led vermelho
+          digitalWrite(red, LOW);
+          digitalWrite(blue, HIGH);
+          digitalWrite(green, HIGH);
+          break;
+        }
         break;
       default:
         Serial.println("NONE");
