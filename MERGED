@@ -1,0 +1,209 @@
+#include <Wire.h>
+#include <SparkFun_APDS9960.h>
+#include <DHT.h>  // biblioteca do DHT11 
+#include <ESP8266WiFi.h>
+extern "C" {
+  #include "user_interface.h"
+}
+
+int red = 14; //D5
+int blue = 13; //D7  //green e blue estão trocados na IDE, na pinagem ponha azul na D7 e green na D8;
+int green = 15; //D8
+
+String apiKey = "EV6343M6BUB9FA3B";     //  Write API key do ThingSpeak
+ 
+const char* ssid =  "brisa-3742538";     // SSID da rede
+const char* password =  "wmywpcsj";         // SENHA da rede
+const char* server = "api.thingspeak.com";
+
+#define DHTPIN 0          //pino 3 arduino equivalente a o pino D3 na placa NodeMCU onde o dht11 está conectado
+ DHT dht(DHTPIN, DHT11);
+WiFiClient client;
+ 
+// Pins on wemos D1 mini
+#define APDS9960_SDA    4  //GPIO4 (D2)
+#define APDS9960_SCL    5  //GPIO5 (D1)
+// Constants
+const byte APDS9960_INT  = 12; //GPIO12 (D6)
+
+
+
+// Global Variables
+int valorint=0;
+SparkFun_APDS9960 apds = SparkFun_APDS9960();
+volatile bool isr_flag = 0;
+
+//Interrupt callback function in IRAM
+void ICACHE_RAM_ATTR interruptRoutine ();
+
+void setup() {
+  pinMode(red, OUTPUT);
+  pinMode(green, OUTPUT);
+  pinMode(blue, OUTPUT);
+   //Start I2C with pins defined above
+  Wire.begin(APDS9960_SDA,APDS9960_SCL);
+
+  // Set interrupt pin as input
+  pinMode(digitalPinToInterrupt(APDS9960_INT), INPUT);
+
+  // Initialize Serial port
+  Serial.begin(9600);
+  dht.begin();
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) 
+     {
+            delay(500);
+            Serial.print(".");
+     }
+      Serial.println("");
+      Serial.println("WiFi connected");
+  Serial.println(F("--------------------------------"));
+  Serial.println(F("SparkFun APDS-9960 - GestureTest"));
+  Serial.println(F("--------------------------------"));
+  
+  // Initialize interrupt service routine
+  attachInterrupt(digitalPinToInterrupt(APDS9960_INT), interruptRoutine, FALLING);
+
+  // Initialize APDS-9960 (configure I2C and initial values)
+  if ( apds.init() ) {
+    Serial.println(F("APDS-9960 initialization complete"));
+  } else {
+    Serial.println(F("Something went wrong during APDS-9960 init!"));
+  }
+  
+  // Start running the APDS-9960 gesture sensor engine
+  if ( apds.enableGestureSensor(true) ) {
+    Serial.println(F("Gesture sensor is now running"));
+  } else {
+    Serial.println(F("Something went wrong during gesture sensor init!"));
+  }
+}
+
+void loop() {
+  
+
+  if( isr_flag == 1 ) {
+    detachInterrupt(digitalPinToInterrupt(APDS9960_INT));
+    handleGesture();
+    isr_flag = 0;
+    attachInterrupt(digitalPinToInterrupt(APDS9960_INT), interruptRoutine, FALLING);
+  }
+  
+
+}
+
+void interruptRoutine() {
+  isr_flag = 1;
+}
+
+void leituraDados() {
+float h = dht.readHumidity();
+      float t = dht.readTemperature();
+      Serial.println(h);
+      Serial.println(t);
+              if (isnan(h) || isnan(t)) 
+                 {
+                     Serial.println("Failed to read from DHT sensor!");
+                      return;
+                 }
+                 if (client.connect(server,80))   // api.thingspeak.com
+                      {  
+                            
+                             String postStr = apiKey;
+                             postStr +="&field1=";
+                             postStr += String(t);
+                             postStr +="&field2=";
+                             postStr += String(h);
+                             postStr += "\r\n\r\n";
+ 
+                             client.print("POST /update HTTP/1.1\n");
+                             client.print("Host: api.thingspeak.com\n");
+                             client.print("Connection: close\n");
+                             client.print("X-THINGSPEAKAPIKEY: "+apiKey+"\n");
+                             client.print("Content-Type: application/x-www-form-urlencoded\n");
+                             client.print("Content-Length: ");
+                             client.print(postStr.length());
+                             client.print("\n\n");
+                             client.print(postStr);
+ 
+                             Serial.print("Temperatura: ");
+                             Serial.print(t);
+                             Serial.print(" °, umidade: ");
+                             Serial.print(h);
+                             Serial.println("%.enviado para o Thingspeak.");
+                        }
+                        client.stop();
+}
+
+void novo() {
+
+  const int httpPort = 80;
+  if (!client.connect(server, httpPort)) {
+    Serial.println("Erro de conexão");
+    return;
+  }
+  String url = "/channels/2492075/fields/1/last?&headers=false";
+  
+  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+               "Host: " + server + "\r\n" + 
+               "Connection: close\r\n\r\n");
+  delay(500);
+  float valori=0;
+  String valor;
+  
+  while(client.available()){
+    String line = client.readStringUntil('\r');
+    valor = line;
+    valori = valor.toFloat();
+  }
+  Serial.println(valori);
+  valorint = valori;
+  client.stop();
+}
+
+
+void handleGesture() {
+    if ( apds.isGestureAvailable() ) {
+    switch ( apds.readGesture() ) {
+      case DIR_UP:
+        Serial.println("UP");
+        leituraDados();
+        digitalWrite(red, HIGH);
+        digitalWrite(blue, HIGH);
+        digitalWrite(green, LOW);
+        break;
+      case DIR_DOWN:
+        Serial.println("DOWN");
+        digitalWrite(red, HIGH);
+        digitalWrite(blue, HIGH);
+        digitalWrite(green, HIGH);
+        break;
+      case DIR_LEFT:
+        Serial.println("LEFT");
+        novo();
+        switch(valorint){
+          case 30 ... INT_MAX:   //acima de 30 graus LED vermelho.
+          digitalWrite(red, LOW);
+          digitalWrite(blue, HIGH);
+          digitalWrite(green, HIGH);
+          break;
+          case 25 ... 29:     //entre 25 e 29 graus LED verde.
+          digitalWrite(red, LOW);
+          digitalWrite(blue, LOW);
+          digitalWrite(green, HIGH);
+          break;
+          default:  //abaixo de 25 graus LED azul.
+          digitalWrite(red, HIGH);
+          digitalWrite(blue, LOW);
+          digitalWrite(green, HIGH);
+          break;
+        }
+        break;
+      case DIR_RIGHT:
+        Serial.println("RIGHT");
+        break;
+      default:
+        Serial.println("NONE");
+    }
+  }
+}
