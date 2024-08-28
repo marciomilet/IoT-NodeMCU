@@ -33,4 +33,10 @@ blue-D8
 green-D7  
 
 
+## ✒️ Autores
+
+* *Alessandro Henrique* - Planejamento, Protótipação e Documentação - [Alessandro Henrique](https://github.com/alessandrohpsf)
+* *Dayvid Douglas* - Desenvolvimento Full-stack - [Dayvid Douglas](https://github.com/dayviddouglas)
+* *Lacê Renê* - Planejamento e Desenvolvimento Front-end - [Renne Gomes](https://github.com/rennegomes)
+* *Márcio Milet* - Desenvolvimento Full-stack - [Marcio Milet](https://github.com/marciomilet)
 
